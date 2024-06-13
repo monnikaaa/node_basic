@@ -1,0 +1,78 @@
+const express = require('express');
+const bodyParser = require('body-parser');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+
+const app = express();
+app.use(bodyParser.json());
+
+// In-memory store for users (in a real application, use a database)
+const users = [];
+
+// Secret key for JWT (in a real application, store this in environment variables)
+const JWT_SECRET = 'your_jwt_secret_key';
+
+// Middleware to authenticate the token
+const authenticateToken = (req, res, next) => {
+    const token = req.header('Authorization')?.split(' ')[1];
+    if (!token) return res.status(401).send('Access Denied');
+
+    try {
+        const verified = jwt.verify(token, JWT_SECRET);
+        req.user = verified;
+        next();
+    } catch (err) {
+        res.status(400).send('Invalid Token');
+    }
+};
+
+// Registration route
+app.post('/register', async (req, res) => {
+    const { username, password } = req.body;
+
+    if (!username || !password) {
+        return res.status(400).send('Username and password are required');
+    }
+
+    const existingUser = users.find(user => user.username === username);
+    if (existingUser) {
+        return res.status(400).send('User already exists');
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    users.push({ username, password: hashedPassword });
+    res.status(201).send('User registered');
+});
+
+// Login route
+app.post('/login', async (req, res) => {
+    const { username, password } = req.body;
+
+    if (!username || !password) {
+        return res.status(400).send('Username and password are required');
+    }
+
+    const user = users.find(user => user.username === username);
+    if (!user) {
+        return res.status(400).send('User not found');
+    }
+
+    const validPassword = await bcrypt.compare(password, user.password);
+    if (!validPassword) {
+        return res.status(400).send('Invalid password');
+    }
+
+    const token = jwt.sign({ username: user.username }, JWT_SECRET, { expiresIn: '1h' });
+    res.json({ token });
+});
+
+// Protected route
+app.get('/protected', authenticateToken, (req, res) => {
+    res.send('This is a protected route');
+});
+
+// Start the server
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+    console.log(Server running on port ${PORT});
+});
